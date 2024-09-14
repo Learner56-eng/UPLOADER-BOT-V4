@@ -1,32 +1,11 @@
-import logging
-import requests
-import urllib.parse
-import filetype
-import os
-import time
-import shutil
-import tldextract
+from pyrogram import Client, filters, enums
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import asyncio
 import json
-import math
-from PIL import Image
+import os
+import requests
 from plugins.config import Config
-from plugins.script import Translation
-from plugins.functions.forcesub import handle_force_subscribe
-from plugins.functions.display_progress import humanbytes, progress_for_pyrogram, TimeFormatter
-from hachoir.metadata import extractMetadata
-from hachoir.parser import createParser
-from pyrogram import filters, Client, enums
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from pyrogram.errors import UserNotParticipant
-from plugins.functions.ran_text import random_char
-from plugins.database.add import add_user_to_database
-from pyrogram.types import Thumbnail
-
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-logging.getLogger("pyrogram").setLevel(logging.WARNING)
+from plugins.functions.display_progress import progress_for_pyrogram
 
 @Client.on_message(filters.private & filters.regex(pattern=".*http.*"))
 async def echo(bot, update):
@@ -53,13 +32,13 @@ async def echo(bot, update):
         fsub = await handle_force_subscribe(bot, update)
         if fsub == 400:
             return
-
     logger.info(update.from_user)
     url = update.text
     youtube_dl_username = None
     youtube_dl_password = None
     file_name = None
 
+    print(url)
     if "|" in url:
         url_parts = url.split("|")
         if len(url_parts) == 2:
@@ -133,7 +112,7 @@ async def echo(bot, update):
     process = await asyncio.create_subprocess_exec(
         *command_to_exec,
         stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
+        stderr=asyncio.subprocess.PIPE,
     )
     stdout, stderr = await process.communicate()
     e_response = stderr.decode().strip()
@@ -156,16 +135,15 @@ async def echo(bot, update):
         return False
 
     if t_response:
-        x_reponse = t_response
-        if "\n" in x_reponse:
-            x_reponse, _ = x_reponse.split("\n")
-        response_json = json.loads(x_reponse)
+        x_response = t_response
+        if "\n" in x_response:
+            x_response, _ = x_response.split("\n")
+        response_json = json.loads(x_response)
         randem = random_char(5)
-        save_ytdl_json_path = Config.DOWNLOAD_LOCATION + \
-            "/" + str(update.from_user.id) + f'{randem}' + ".json"
+        save_ytdl_json_path = Config.DOWNLOAD_LOCATION + "/" + str(update.from_user.id) + f'{randem}' + ".json"
         with open(save_ytdl_json_path, "w", encoding="utf8") as outfile:
             json.dump(response_json, outfile, ensure_ascii=False)
-
+        
         inline_keyboard = []
         duration = None
         if "duration" in response_json:
@@ -226,120 +204,118 @@ async def echo(bot, update):
                 "file", format_id, format_ext)
             cb_string_video = "{}={}={}".format(
                 "video", format_id, format_ext)
-           
-            # Construct the callback keyboard for a single format
-            inline_keyboard = [
-                [
-                    InlineKeyboardButton(
-                        "📂 " + format_id + " " + format_ext,
-                        callback_data=(cb_string_video).encode("UTF-8")
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        "⛔️ ᴄʟᴏsᴇ", callback_data='close')
-                ]
+            inline_keyboard.append([
+                InlineKeyboardButton(
+                    "🎬 sᴍᴇᴅɪᴀ",
+                    callback_data=(cb_string_video).encode("UTF-8")
+                )
+            ])
+            cb_string_file = "{}={}={}".format(
+                "file", format_id, format_ext)
+            cb_string_video = "{}={}={}".format(
+                "video", format_id, format_ext)
+            inline_keyboard.append([
+                InlineKeyboardButton(
+                    "🎥 ᴠɪᴅᴇᴏ",
+                    callback_data=(cb_string_video).encode("UTF-8")
+                )
+            ])
+        reply_markup = InlineKeyboardMarkup(inline_keyboard)
+        await chk.delete()
+        await bot.send_message(
+            chat_id=update.chat.id,
+            text=Translation.FORMAT_SELECTION.format(Thumbnail) + "\n" + Translation.SET_CUSTOM_USERNAME_PASSWORD,
+            reply_markup=reply_markup,
+            parse_mode=enums.ParseMode.HTML,
+            reply_to_message_id=update.id
+        )
+    else:
+        await chk.delete()
+        await bot.send_message(
+            chat_id=update.chat.id,
+            text="No formats found. Please check the link and try again.",
+            reply_to_message_id=update.id,
+            parse_mode=enums.ParseMode.HTML
+        )
+        return
+
+@Client.on_callback_query(filters.regex(".*"))
+async def callback_handler(bot, callback_query):
+    data = callback_query.data
+    user_id = callback_query.from_user.id
+
+    if data.startswith("close"):
+        await callback_query.message.delete()
+        return
+
+    if "|" in data:
+        parts = data.split("|")
+        type_of_request = parts[0]
+        format_id = parts[1]
+        file_extension = parts[2]
+        randem = parts[3]
+        file_name = f"{user_id}{randem}.{file_extension}"
+        
+        # Define the command based on the type of request (file or video)
+        if type_of_request == "file":
+            command_to_exec = [
+                "yt-dlp",
+                "--no-warnings",
+                "--format", format_id,
+                "--output", file_name,
+                url
             ]
+        elif type_of_request == "video":
+            command_to_exec = [
+                "yt-dlp",
+                "--no-warnings",
+                "--format", format_id,
+                "--output", file_name,
+                url
+            ]
+        
+        await callback_query.message.edit_text("Downloading your file...")
 
-        # Send message with inline keyboard
-        await chk.delete()
-        time.sleep(1)
-        await bot.send_message(
-            chat_id=update.chat.id,
-            text=Translation.FORMAT_FOUND.format(
-                response_json["title"],
-                response_json["duration"] if duration else "Unknown Duration"
-            ),
-            reply_to_message_id=update.id,
-            parse_mode=enums.ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard)
+        process = await asyncio.create_subprocess_exec(
+            *command_to_exec,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
         )
 
-    else:
-        # If no formats were found, notify the user
-        await chk.delete()
-        time.sleep(1)
-        await bot.send_message(
-            chat_id=update.chat.id,
-            text=Translation.NO_FORMAT_FOUND,
-            reply_to_message_id=update.id,
-            parse_mode=enums.ParseMode.HTML,
-            disable_web_page_preview=True
-        )
+        # Display the progress bar
+        async for line in process.stdout:
+            if line:
+                await callback_query.message.edit_text(f"Progress: {line.decode().strip()}")
+        
+        stdout, stderr = await process.communicate()
+        if stderr:
+            await callback_query.message.edit_text(f"Error: {stderr.decode().strip()}")
+            return
 
-@Client.on_callback_query(filters.regex("file"))
-async def process_file_query(bot, callback_query):
-    data = callback_query.data.decode("UTF-8").split("|")
-    file_type, format_id, format_ext, randem = data
+        file_path = file_name
+        if os.path.exists(file_path):
+            await callback_query.message.edit_text("Uploading your file...")
 
-    # Fetch URL or process as needed
-    url = "<URL_REPLACE_WITH_ACTUAL_URL>"
+            with open(file_path, "rb") as file:
+                await bot.send_document(
+                    chat_id=user_id,
+                    document=file,
+                    caption="Here is your file:",
+                    progress=progress_for_pyrogram,
+                    progress_args=("Uploading...", callback_query.message)
+                )
+            
+            os.remove(file_path)
+            await callback_query.message.edit_text("File uploaded successfully.")
+        else:
+            await callback_query.message.edit_text("File not found after download.")
 
-    # Show progress bar for download
-    async def download_file_with_progress(url, file_name):
-        try:
-            response = requests.get(url, stream=True)
-            total_size = int(response.headers.get('content-length', 0))
-            block_size = 1024
-            progress = 0
+# Function to show progress in Pyrogram
+async def progress_for_pyrogram(current, total, message):
+    percent = int(current / total * 100)
+    await message.edit_text(f"Progress: {percent}%")
 
-            with open(file_name, 'wb') as file:
-                for data in response.iter_content(block_size):
-                    file.write(data)
-                    progress += len(data)
-                    percent = (progress / total_size) * 100
-                    await callback_query.message.edit_text(
-                        f"Downloading: {percent:.2f}% complete",
-                        reply_markup=callback_query.message.reply_markup
-                    )
-            await callback_query.message.edit_text(f"Download complete: {file_name}")
-        except Exception as e:
-            logger.error(f"Download error: {e}")
-            await callback_query.message.edit_text(f"Error: {str(e)}")
+# Add more functions if needed
 
-    if file_type == "file":
-        file_name = f"{format_id}.{format_ext}"
-        await download_file_with_progress(url, file_name)
-    else:
-        await callback_query.answer("Unsupported format")
 
-@Client.on_callback_query(filters.regex("video"))
-async def process_video_query(bot, callback_query):
-    data = callback_query.data.decode("UTF-8").split("|")
-    file_type, format_id, format_ext, randem = data
-
-    # Fetch URL or process as needed
-    url = "<URL_REPLACE_WITH_ACTUAL_URL>"
-
-    # Show progress bar for download
-    async def download_video_with_progress(url, file_name):
-        try:
-            response = requests.get(url, stream=True)
-            total_size = int(response.headers.get('content-length', 0))
-            block_size = 1024
-            progress = 0
-
-            with open(file_name, 'wb') as file:
-                for data in response.iter_content(block_size):
-                    file.write(data)
-                    progress += len(data)
-                    percent = (progress / total_size) * 100
-                    await callback_query.message.edit_text(
-                        f"Downloading: {percent:.2f}% complete",
-                        reply_markup=callback_query.message.reply_markup
-                    )
-            await callback_query.message.edit_text(f"Download complete: {file_name}")
-        except Exception as e:
-            logger.error(f"Download error: {e}")
-            await callback_query.message.edit_text(f"Error: {str(e)}")
-
-    if file_type == "video":
-        file_name = f"{format_id}.{format_ext}"
-        await download_video_with_progress(url, file_name)
-    else:
-        await callback_query.answer("Unsupported format")
-
-@Client.on_callback_query(filters.regex("close"))
-async def close_callback(bot, callback_query):
-    await callback_query.message.delete()
-
+  
