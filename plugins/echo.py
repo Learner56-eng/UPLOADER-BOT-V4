@@ -1,7 +1,5 @@
 # ©️ LISA-KOREA | @LISA_FAN_LK | NT_BOT_CHANNEL
 
-
-
 import logging
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -80,7 +78,6 @@ async def echo(bot, update):
             url = url.strip()
         if file_name is not None:
             file_name = file_name.strip()
-        # https://stackoverflow.com/a/761825/4723940
         if youtube_dl_username is not None:
             youtube_dl_username = youtube_dl_username.strip()
         if youtube_dl_password is not None:
@@ -128,18 +125,15 @@ async def echo(bot, update):
           )
     process = await asyncio.create_subprocess_exec(
         *command_to_exec,
-        # stdout must a pipe to be accessible as process.stdout
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    # Wait for the subprocess to finish
     stdout, stderr = await process.communicate()
     e_response = stderr.decode().strip()
     logger.info(e_response)
     t_response = stdout.decode().strip()
     if e_response and "nonnumeric port" not in e_response:
-        # logger.warn("Status : FAIL", exc.returncode, exc.output)
-        error_message = e_response.replace("please report this issue on https://yt-dl.org/bug . Make sure you are using the latest version; see  https://yt-dl.org/update  on how to update. Be sure to call youtube-dl with the --verbose flag and include its complete output.", "")
+        error_message = e_response.replace("please report this issue on https://yt-dl.org/bug . Make sure you are using the latest version; see  https://yt-dl.org/update  on how to update.", "")
         if "This video is only available for registered users." in error_message:
             error_message += Translation.SET_CUSTOM_USERNAME_PASSWORD
         await chk.delete()
@@ -153,7 +147,6 @@ async def echo(bot, update):
         )
         return False
     if t_response:
-        # logger.info(t_response)
         x_reponse = t_response
         if "\n" in x_reponse:
             x_reponse, _ = x_reponse.split("\n")
@@ -163,7 +156,6 @@ async def echo(bot, update):
             "/" + str(update.from_user.id) + f'{randem}' + ".json"
         with open(save_ytdl_json_path, "w", encoding="utf8") as outfile:
             json.dump(response_json, outfile, ensure_ascii=False)
-        # logger.info(response_json)
         inline_keyboard = []
         duration = None
         if "duration" in response_json:
@@ -182,25 +174,22 @@ async def echo(bot, update):
                     "video", format_id, format_ext, randem)
                 cb_string_file = "{}|{}|{}|{}".format(
                     "file", format_id, format_ext, randem)
-                if format_string is not None and not "audio only" in format_string:
+                # Handle both video and audio files based on their format
+                if format_string is not None and "audio" in format_string:
+                    ikeyboard = [
+                        InlineKeyboardButton(
+                            "🎵 " + format_string + " " + format_ext + " " + approx_file_size + " ",
+                            callback_data=(cb_string_file).encode("UTF-8")
+                        )
+                    ]
+                elif format_string is not None and not "audio" in format_string:
                     ikeyboard = [
                         InlineKeyboardButton(
                             "🎬 " + format_string + " " + format_ext + " " + approx_file_size + " ",
                             callback_data=(cb_string_video).encode("UTF-8")
                         )
                     ]
-                    """if duration is not None:
-                        cb_string_video_message = "{}|{}|{}|{}|{}".format(
-                            "vm", format_id, format_ext, ran, randem)
-                        ikeyboard.append(
-                            InlineKeyboardButton(
-                                "VM",
-                                callback_data=(
-                                    cb_string_video_message).encode("UTF-8")
-                            )
-                        )"""
                 else:
-                    # special weird case :\
                     ikeyboard = [
                         InlineKeyboardButton(
                             "🎬 [" +
@@ -226,60 +215,14 @@ async def echo(bot, update):
                 ])
                 inline_keyboard.append([                 
                     InlineKeyboardButton(
-                        "⛔️ ᴄʟᴏsᴇ", callback_data='close')               
-                ])
-        else:
-            format_id = response_json["format_id"]
-            format_ext = response_json["ext"]
-            cb_string_file = "{}|{}|{}|{}".format(
-                "file", format_id, format_ext, randem)
-            cb_string_video = "{}|{}|{}|{}".format(
-                "video", format_id, format_ext, randem)
-            inline_keyboard.append([
-                InlineKeyboardButton(
-                    "🎬 sᴍᴇᴅɪᴀ",
-                    callback_data=(cb_string_video).encode("UTF-8")
+                        "⛔️ ᴄʟᴏsᴇ", callback_data="close")])
+                reply_markup = InlineKeyboardMarkup(inline_keyboard)
+                await chk.delete()
+                time.sleep(1)
+                await bot.send_message(
+                    chat_id=update.chat.id,
+                    text=Translation.FORMAT_SELECTION.format(approx_file_size, duration),
+                    reply_markup=reply_markup,
+                    reply_to_message_id=update.id,
+                    parse_mode=enums.ParseMode.HTML
                 )
-            ])
-            cb_string_file = "{}={}={}".format(
-                "file", format_id, format_ext)
-            cb_string_video = "{}={}={}".format(
-                "video", format_id, format_ext)
-            inline_keyboard.append([
-                InlineKeyboardButton(
-                    "🎥 ᴠɪᴅᴇᴏ",
-                    callback_data=(cb_string_video).encode("UTF-8")
-                )
-            ])
-        reply_markup = InlineKeyboardMarkup(inline_keyboard)
-        await chk.delete()
-        await bot.send_message(
-            chat_id=update.chat.id,
-            text=Translation.FORMAT_SELECTION.format(Thumbnail) + "\n" + Translation.SET_CUSTOM_USERNAME_PASSWORD,
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML,
-            reply_to_message_id=update.id
-        )
-    else:
-        # ©️ LISA-KOREA | @LISA_FAN_LK | NT_BOT_CHANNEL
-        inline_keyboard = []
-        cb_string_file = "{}={}={}".format(
-            "file", "LFO", "NONE")
-        cb_string_video = "{}={}={}".format(
-            "video", "OFL", "ENON")
-        inline_keyboard.append([
-            InlineKeyboardButton(
-                "🎬 ᴍᴇᴅɪᴀ",
-                callback_data=(cb_string_video).encode("UTF-8")
-            )
-        ])
-        reply_markup = InlineKeyboardMarkup(inline_keyboard)
-        await chk.delete(True)
-        await bot.send_message(
-            chat_id=update.chat.id,
-            text=Translation.FORMAT_SELECTION,
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML,
-            reply_to_message_id=update.id
-        )
-
