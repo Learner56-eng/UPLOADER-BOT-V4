@@ -1,23 +1,21 @@
-# ©️ LISA-KOREA | @LISA_FAN_LK | NT_BOT_CHANNEL
-
-
-
 import logging
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-import requests, urllib.parse, filetype, os, time, shutil, tldextract, asyncio, json, math
+import requests
+import urllib.parse
+import filetype
+import os
+import time
+import shutil
+import tldextract
+import asyncio
+import json
+import math
 from PIL import Image
 from plugins.config import Config
-import time
 from plugins.script import Translation
-logging.getLogger("pyrogram").setLevel(logging.WARNING)
-from pyrogram import filters
-from pyrogram import Client, enums
+from pyrogram import filters, Client, enums
 from plugins.functions.forcesub import handle_force_subscribe
-from plugins.functions.display_progress import humanbytes
-from plugins.functions.help_uploadbot import DownLoadFile
 from plugins.functions.display_progress import progress_for_pyrogram, humanbytes, TimeFormatter
+from plugins.functions.help_uploadbot import DownLoadFile
 from hachoir.metadata import extractMetadata
 from hachoir.parser import createParser
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -25,6 +23,11 @@ from pyrogram.errors import UserNotParticipant
 from plugins.functions.ran_text import random_char
 from plugins.database.add import add_user_to_database
 from pyrogram.types import Thumbnail
+
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+logging.getLogger("pyrogram").setLevel(logging.WARNING)
 
 @Client.on_message(filters.private & filters.regex(pattern=".*http.*"))
 async def echo(bot, update):
@@ -48,9 +51,10 @@ async def echo(bot, update):
     await add_user_to_database(bot, update)
 
     if Config.UPDATES_CHANNEL:
-      fsub = await handle_force_subscribe(bot, update)
-      if fsub == 400:
-        return
+        fsub = await handle_force_subscribe(bot, update)
+        if fsub == 400:
+            return
+
     logger.info(update.from_user)
     url = update.text
     youtube_dl_username = None
@@ -80,7 +84,6 @@ async def echo(bot, update):
             url = url.strip()
         if file_name is not None:
             file_name = file_name.strip()
-        # https://stackoverflow.com/a/761825/4723940
         if youtube_dl_username is not None:
             youtube_dl_username = youtube_dl_username.strip()
         if youtube_dl_password is not None:
@@ -95,51 +98,48 @@ async def echo(bot, update):
                 o = entity.offset
                 l = entity.length
                 url = url[o:o + l]
+
+    command_to_exec = [
+        "yt-dlp",
+        "--no-warnings",
+        "--youtube-skip-hls-manifest",
+        "-j",
+        url
+    ]
+
     if Config.HTTP_PROXY != "":
-        command_to_exec = [
-            "yt-dlp",
-            "--no-warnings",
-            "--youtube-skip-hls-manifest",
-            "-j",
-            url,
-            "--proxy", Config.HTTP_PROXY
-        ]
-    else:
-        command_to_exec = [
-            "yt-dlp",
-            "--no-warnings",
-            "--youtube-skip-hls-manifest",
-            "-j",
-            url
-        ]
+        command_to_exec.append("--proxy")
+        command_to_exec.append(Config.HTTP_PROXY)
     if youtube_dl_username is not None:
         command_to_exec.append("--username")
         command_to_exec.append(youtube_dl_username)
     if youtube_dl_password is not None:
         command_to_exec.append("--password")
         command_to_exec.append(youtube_dl_password)
+
     logger.info(command_to_exec)
     chk = await bot.send_message(
-            chat_id=update.chat.id,
-            text=f'ᴘʀᴏᴄᴇssɪɴɢ ʏᴏᴜʀ ʟɪɴᴋ ⌛',
-            disable_web_page_preview=True,
-            reply_to_message_id=update.id,
-            parse_mode=enums.ParseMode.HTML
-          )
+        chat_id=update.chat.id,
+        text=f'Processing your link ⌛',
+        disable_web_page_preview=True,
+        reply_to_message_id=update.id,
+        parse_mode=enums.ParseMode.HTML
+    )
+    
     process = await asyncio.create_subprocess_exec(
         *command_to_exec,
-        # stdout must a pipe to be accessible as process.stdout
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    # Wait for the subprocess to finish
+    
     stdout, stderr = await process.communicate()
     e_response = stderr.decode().strip()
     logger.info(e_response)
     t_response = stdout.decode().strip()
+    
     if e_response and "nonnumeric port" not in e_response:
-        # logger.warn("Status : FAIL", exc.returncode, exc.output)
-        error_message = e_response.replace("please report this issue on https://yt-dl.org/bug . Make sure you are using the latest version; see  https://yt-dl.org/update  on how to update. Be sure to call youtube-dl with the --verbose flag and include its complete output.", "")
+        error_message = e_response.replace(
+            "please report this issue on https://yt-dl.org/bug . Make sure you are using the latest version; see  https://yt-dl.org/update  on how to update. Be sure to call youtube-dl with the --verbose flag and include its complete output.", "")
         if "This video is only available for registered users." in error_message:
             error_message += Translation.SET_CUSTOM_USERNAME_PASSWORD
         await chk.delete()
@@ -152,18 +152,17 @@ async def echo(bot, update):
             disable_web_page_preview=True
         )
         return False
+
     if t_response:
-        # logger.info(t_response)
         x_reponse = t_response
         if "\n" in x_reponse:
             x_reponse, _ = x_reponse.split("\n")
         response_json = json.loads(x_reponse)
         randem = random_char(5)
-        save_ytdl_json_path = Config.DOWNLOAD_LOCATION + \
-            "/" + str(update.from_user.id) + f'{randem}' + ".json"
+        save_ytdl_json_path = Config.DOWNLOAD_LOCATION + "/" + str(update.from_user.id) + f'{randem}' + ".json"
         with open(save_ytdl_json_path, "w", encoding="utf8") as outfile:
             json.dump(response_json, outfile, ensure_ascii=False)
-        # logger.info(response_json)
+        
         inline_keyboard = []
         duration = None
         if "duration" in response_json:
@@ -178,10 +177,8 @@ async def echo(bot, update):
                 approx_file_size = ""
                 if "filesize" in formats:
                     approx_file_size = humanbytes(formats["filesize"])
-                cb_string_video = "{}|{}|{}|{}".format(
-                    "video", format_id, format_ext, randem)
-                cb_string_file = "{}|{}|{}|{}".format(
-                    "file", format_id, format_ext, randem)
+                cb_string_video = "{}|{}|{}|{}".format("video", format_id, format_ext, randem)
+                cb_string_file = "{}|{}|{}|{}".format("file", format_id, format_ext, randem)
                 if format_string is not None and not "audio only" in format_string:
                     ikeyboard = [
                         InlineKeyboardButton(
@@ -189,23 +186,10 @@ async def echo(bot, update):
                             callback_data=(cb_string_video).encode("UTF-8")
                         )
                     ]
-                    """if duration is not None:
-                        cb_string_video_message = "{}|{}|{}|{}|{}".format(
-                            "vm", format_id, format_ext, ran, randem)
-                        ikeyboard.append(
-                            InlineKeyboardButton(
-                                "VM",
-                                callback_data=(
-                                    cb_string_video_message).encode("UTF-8")
-                            )
-                        )"""
                 else:
-                    # special weird case :\
                     ikeyboard = [
                         InlineKeyboardButton(
-                            "🎬 [" +
-                            "] ( " +
-                            approx_file_size + " )",
+                            "🎬 [" + "] ( " + approx_file_size + " )",
                             callback_data=(cb_string_video).encode("UTF-8")
                         )
                     ]
@@ -224,62 +208,120 @@ async def echo(bot, update):
                     InlineKeyboardButton(
                         "🎵 ᴍᴘ𝟹 " + "(" + "320 ᴋʙᴘs" + ")", callback_data=cb_string.encode("UTF-8"))
                 ])
-                inline_keyboard.append([                 
+                inline_keyboard.append([
                     InlineKeyboardButton(
-                        "⛔️ ᴄʟᴏsᴇ", callback_data='close')               
+                        "⛔️ ᴄʟᴏsᴇ", callback_data='close')
                 ])
         else:
             format_id = response_json["format_id"]
             format_ext = response_json["ext"]
-            cb_string_file = "{}|{}|{}|{}".format(
-                "file", format_id, format_ext, randem)
-            cb_string_video = "{}|{}|{}|{}".format(
-                "video", format_id, format_ext, randem)
-            inline_keyboard.append([
+            cb_string_file = "{}={}={}".format("file", format_id, format_ext)
+              cb_string_video = "{}={}={}".format("video", format_id, format_ext)
+            cb_string_file = "{}={}={}".format("file", format_id, format_ext)
+            inline_keyboard = [
                 InlineKeyboardButton(
-                    "🎬 sᴍᴇᴅɪᴀ",
+                    "🎬 " + format_id + " " + format_ext,
                     callback_data=(cb_string_video).encode("UTF-8")
-                )
-            ])
-            cb_string_file = "{}={}={}".format(
-                "file", format_id, format_ext)
-            cb_string_video = "{}={}={}".format(
-                "video", format_id, format_ext)
-            inline_keyboard.append([
+                ),
                 InlineKeyboardButton(
-                    "🎥 ᴠɪᴅᴇᴏ",
-                    callback_data=(cb_string_video).encode("UTF-8")
-                )
-            ])
-        reply_markup = InlineKeyboardMarkup(inline_keyboard)
+                    "🎵 " + format_ext,
+                    callback_data=(cb_string_file).encode("UTF-8")
+                ),
+                InlineKeyboardButton(
+                    "⛔️ ᴄʟᴏsᴇ", callback_data='close')
+            ]
+
+        await chk.delete()
+        time.sleep(1)
+        await bot.send_message(
+            chat_id=update.chat.id,
+            text=Translation.FORMAT_FOUND,
+            reply_to_message_id=update.id,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard),
+            parse_mode=enums.ParseMode.HTML,
+            disable_web_page_preview=True
+        )
+        return True
+
+    else:
         await chk.delete()
         await bot.send_message(
             chat_id=update.chat.id,
-            text=Translation.FORMAT_SELECTION.format(Thumbnail) + "\n" + Translation.SET_CUSTOM_USERNAME_PASSWORD,
-            reply_markup=reply_markup,
+            text=Translation.NO_VOID_FORMAT_FOUND,
+            reply_to_message_id=update.id,
             parse_mode=enums.ParseMode.HTML,
-            reply_to_message_id=update.id
+            disable_web_page_preview=True
         )
-    else:
-        # ©️ LISA-KOREA | @LISA_FAN_LK | NT_BOT_CHANNEL
-        inline_keyboard = []
-        cb_string_file = "{}={}={}".format(
-            "file", "LFO", "NONE")
-        cb_string_video = "{}={}={}".format(
-            "video", "OFL", "ENON")
-        inline_keyboard.append([
-            InlineKeyboardButton(
-                "🎬 ᴍᴇᴅɪᴀ",
-                callback_data=(cb_string_video).encode("UTF-8")
-            )
-        ])
-        reply_markup = InlineKeyboardMarkup(inline_keyboard)
-        await chk.delete(True)
-        await bot.send_message(
-            chat_id=update.chat.id,
-            text=Translation.FORMAT_SELECTION,
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML,
-            reply_to_message_id=update.id
-        )
+        return False
 
+@Client.on_callback_query()
+async def callback_handler(bot, callback_query):
+    data = callback_query.data
+    chat_id = callback_query.message.chat.id
+    message_id = callback_query.message.message_id
+
+    if data.startswith("close"):
+        await bot.delete_messages(chat_id, message_id)
+        return
+
+    # Parse callback data
+    file_type, format_id, format_ext, randem = data.split("|")
+
+    # Define a function to download the file with progress
+    async def download_file(url, file_name):
+        try:
+            # Start the download and monitor progress
+            async with bot.send_message(
+                chat_id=chat_id,
+                text="Downloading your file...",
+                reply_to_message_id=callback_query.message.message_id,
+                parse_mode=enums.ParseMode.HTML
+            ) as msg:
+                response = requests.get(url, stream=True)
+                total_size = int(response.headers.get('content-length', 0))
+                progress_bar = progress_for_pyrogram(msg, total_size)
+
+                with open(file_name, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                        progress_bar.update(len(chunk))
+                
+                await msg.edit_text("Download completed!")
+                return file_name
+
+        except Exception as e:
+            await msg.edit_text(f"Failed to download the file. Error: {str(e)}")
+            return None
+
+    # Determine URL based on file type
+    file_name = f"download_{randem}.{format_ext}"
+    if file_type == "video":
+        # Define your video download URL or logic here
+        download_url = f"https://example.com/video/{format_id}.{format_ext}"
+    elif file_type == "file":
+        # Define your file download URL or logic here
+        download_url = f"https://example.com/file/{format_id}.{format_ext}"
+    elif file_type == "audio":
+        # Define your audio download URL or logic here
+        download_url = f"https://example.com/audio/{format_id}.{format_ext}"
+
+    # Call the download function
+    downloaded_file = await download_file(download_url, file_name)
+
+    if downloaded_file:
+        # Send the downloaded file to the user
+        await bot.send_document(
+            chat_id=chat_id,
+            document=downloaded_file,
+            caption="Here is your file!",
+            reply_to_message_id=callback_query.message.message_id
+        )
+        # Clean up the downloaded file
+        os.remove(downloaded_file)
+    else:
+        await bot.send_message(
+            chat_id=chat_id,
+            text="Error occurred while processing your request.",
+            reply_to_message_id=callback_query.message.message_id,
+            parse_mode=enums.ParseMode.HTML
+        )
